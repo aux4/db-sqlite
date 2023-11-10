@@ -1,6 +1,6 @@
 {
   "name": "@aux4/db-sqlite",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Database CLI for SQLite",
   "main": "index.js",
   "preferGlobal": true,
