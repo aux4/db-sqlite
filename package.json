@@ -28,7 +28,7 @@
   "homepage": "https://aux4.io",
   "funding": "https://aux4.io/donate",
   "dependencies": {
-    "better-sqlite3": "^9.1.1"
+    "@libsql/client": "^0.14.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",

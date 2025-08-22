@@ -8,11 +8,6 @@ async function main() {
   const query = args[2] || '';
   const file = args[3] || '';
   let inputStream = args[4] === 'true';
-  
-  // Auto-detect if stdin has data
-  if (!inputStream && !process.stdin.isTTY) {
-    inputStream = true;
-  }
   const paramsArg = args[5] || '{}';
 
   if (!action || (action !== 'execute' && action !== 'stream')) {
@@ -83,13 +78,17 @@ async function main() {
           const items = Array.isArray(data) ? data : [data];
 
           if (action === 'execute') {
-            const results = [];
+            const allResults = [];
             for (const item of items) {
               const mergedParams = { ...item, ...params };
               const result = await db.execute(sql, mergedParams);
-              results.push(result.data);
+              if (Array.isArray(result.data)) {
+                allResults.push(...result.data);
+              } else {
+                allResults.push(result.data);
+              }
             }
-            console.log(JSON.stringify(results));
+            console.log(JSON.stringify(allResults));
           } else if (action === 'stream') {
             for (const item of items) {
               const mergedParams = { ...item, ...params };

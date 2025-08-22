@@ -1,5 +1,19 @@
-import SQLite from "better-sqlite3";
+import { createClient } from "@libsql/client";
 import { Readable } from "stream";
+
+function convertBigInts(obj) {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'bigint') return Number(obj);
+  if (Array.isArray(obj)) return obj.map(convertBigInts);
+  if (typeof obj === 'object') {
+    const converted = {};
+    for (const [key, value] of Object.entries(obj)) {
+      converted[key] = convertBigInts(value);
+    }
+    return converted;
+  }
+  return obj;
+}
 
 class Database {
   constructor(config) {
@@ -8,34 +22,40 @@ class Database {
 
   async open() {
     const { database, ...options } = this.config;
-    this.db = new SQLite(database, options);
+    this.db = createClient({
+      url: `file:${database}`,
+      ...options
+    });
   }
 
   async close() {
     if (!this.db) return;
 
-    this.db.close();
+    await this.db.close();
   }
 
   async execute(sql, params = {}) {
-    const query = this.db.prepare(sql);
-    
     try {
-      const result = query.all(params);
-      return { data: result };
-    } catch (error) {
-      if (error.message.includes('This statement does not return data')) {
-        const result = query.run(params);
-        return { data: { changes: result.changes, lastInsertRowid: result.lastInsertRowid } };
+      const result = await this.db.execute({ sql, args: params });
+      
+      if (result.rows && result.rows.length > 0) {
+        return { data: convertBigInts(result.rows) };
+      } else {
+        return { 
+          data: { 
+            changes: convertBigInts(result.rowsAffected || 0), 
+            lastInsertRowid: convertBigInts(result.lastInsertRowid || null)
+          } 
+        };
       }
+    } catch (error) {
       throw error;
     }
   }
 
   async stream(sql, params = {}) {
-    const query = this.db.prepare(sql);
-    const rows = query.iterate(params);
-    return Readable.from(rows);
+    const result = await this.db.execute({ sql, args: params });
+    return Readable.from(convertBigInts(result.rows || []));
   }
 }
 

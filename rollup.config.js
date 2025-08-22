@@ -10,7 +10,7 @@ export default {
     banner: '#!/usr/bin/env node\n',
     exports: 'none'
   },
-  external: ['better-sqlite3'],
+  external: ['@libsql/client'],
   plugins: [
     nodeResolve({
       preferBuiltins: true
