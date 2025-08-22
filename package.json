@@ -2,9 +2,11 @@
   "name": "@aux4/db-sqlite",
   "version": "0.0.2",
   "description": "Database CLI for SQLite",
+  "type": "module",
   "main": "index.js",
   "preferGlobal": true,
   "scripts": {
+    "build": "rollup -c",
     "test": "aux4-test run",
     "coverage": "aux4-test coverage"
   },
@@ -29,6 +31,9 @@
     "better-sqlite3": "^9.1.1"
   },
   "devDependencies": {
-    "@aux4/test": "^0.0.19"
+    "@rollup/plugin-commonjs": "^28.0.6",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.1",
+    "rollup": "^4.47.0"
   }
 }

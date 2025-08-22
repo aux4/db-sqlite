@@ -66,3 +66,6 @@ build
 local-test
 
 .DS_Store
+
+*.db
+package/lib

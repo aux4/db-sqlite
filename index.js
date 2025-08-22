@@ -1,5 +1,5 @@
-const SQLite = require("better-sqlite3");
-const { Readable } = require("stream");
+import SQLite from "better-sqlite3";
+import { Readable } from "stream";
 
 class Database {
   constructor(config) {
@@ -19,8 +19,17 @@ class Database {
 
   async execute(sql, params = {}) {
     const query = this.db.prepare(sql);
-    const result = query.all(params);
-    return { data: result };
+    
+    try {
+      const result = query.all(params);
+      return { data: result };
+    } catch (error) {
+      if (error.message.includes('This statement does not return data')) {
+        const result = query.run(params);
+        return { data: { changes: result.changes, lastInsertRowid: result.lastInsertRowid } };
+      }
+      throw error;
+    }
   }
 
   async stream(sql, params = {}) {
@@ -30,4 +39,4 @@ class Database {
   }
 }
 
-module.exports = Database;
+export default Database;

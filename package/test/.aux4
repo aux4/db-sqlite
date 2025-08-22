@@ -4,12 +4,12 @@
       "name": "main",
       "commands": [
         {
-          "name": "build",
+          "name": "now",
           "execute": [
-            "npm run build"
+            "log:values(*)"
           ],
           "help": {
-            "text": "Build aux4/db-sqlite"
+            "text": ""
           }
         }
       ]

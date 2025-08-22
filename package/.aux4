@@ -1,0 +1,95 @@
+{
+  "scope": "aux4",
+  "name": "db-sqlite",
+  "version": "1.0.0",
+  "description": "sqlite database tools",
+  "tags": [
+    "db",
+    "database",
+    "sqlite"
+  ],
+  "dependencies": [
+    "aux4/db"
+  ],
+  "profiles": [
+    {
+      "name": "db",
+      "commands": [
+        {
+          "name": "sqlite",
+          "execute": [
+            "profile:db:sqlite"
+          ],
+          "help": {
+            "text": "sqlite database tools"
+          }
+        }
+      ]
+    },
+    {
+      "name": "db:sqlite",
+      "commands": [
+        {
+          "name": "execute",
+          "execute": [
+            "stdin:node ${packageDir}/lib/aux4-sqlite.cjs execute values(database, query, file, inputStream, *)"
+          ],
+          "help": {
+            "text": "Execute a query on the sqlite database",
+            "variables": [
+              {
+                "name": "database",
+                "text": "Path to the sqlite database file"
+              },
+              {
+                "name": "query",
+                "text": "SQL query to execute",
+                "default": ""
+              },
+              {
+                "name": "file",
+                "text": "SQL file to execute",
+                "default": ""
+              },
+              {
+                "name": "inputStream",
+                "text": "Read JSON input from stdin",
+                "default": "false"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stream",
+          "execute": [
+            "stdin:node ${packageDir}/lib/aux4-sqlite.cjs stream values(database, query, file, inputStream, *)"
+          ],
+          "help": {
+            "text": "Execute a query on the sqlite database and stream results",
+            "variables": [
+              {
+                "name": "database",
+                "text": "Path to the sqlite database file"
+              },
+              {
+                "name": "query",
+                "text": "SQL query to execute",
+                "default": ""
+              },
+              {
+                "name": "file",
+                "text": "SQL file to execute",
+                "default": ""
+              },
+              {
+                "name": "inputStream",
+                "text": "Read JSON input from stdin",
+                "default": "false"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
