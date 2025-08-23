@@ -67,34 +67,59 @@ async function main() {
     await db.open();
 
     if (inputStream) {
-      let input = '';
+      const chunks = [];
+      let totalLength = 0;
+
       process.stdin.on('data', chunk => {
-        input += chunk;
+        chunks.push(chunk);
+        totalLength += chunk.length;
       });
 
       process.stdin.on('end', async () => {
         try {
-          const data = JSON.parse(input);
-          const items = Array.isArray(data) ? data : [data];
+          const input = Buffer.concat(chunks, totalLength).toString('utf8').trim();
+          
+          let items;
+          if (input.startsWith('[') || input.startsWith('{') && !input.includes('\n')) {
+            // Regular JSON array or single object
+            const data = JSON.parse(input);
+            items = Array.isArray(data) ? data : [data];
+          } else {
+            // JSON Lines format (JSONL) - each line is a separate JSON object
+            items = input.split('\n')
+              .filter(line => line.trim())
+              .map(line => JSON.parse(line.trim()));
+          }
 
           if (action === 'execute') {
-            const allResults = [];
-            for (const item of items) {
-              const mergedParams = { ...item, ...params };
+            if (items.length > 1) {
+              // Use batch operation for multiple items
+              const paramsList = items.map(item => ({ ...item, ...params }));
+              const result = await db.executeBatch(sql, paramsList);
+              console.log(JSON.stringify(result.data));
+            } else {
+              // Single item execution
+              const mergedParams = { ...items[0], ...params };
               const result = await db.execute(sql, mergedParams);
-              if (Array.isArray(result.data)) {
-                allResults.push(...result.data);
-              } else {
-                allResults.push(result.data);
-              }
+              console.log(JSON.stringify(Array.isArray(result.data) ? result.data : [result.data]));
             }
-            console.log(JSON.stringify(allResults));
           } else if (action === 'stream') {
             for (const item of items) {
               const mergedParams = { ...item, ...params };
-              const stream = await db.stream(sql, mergedParams);
-              for await (const row of stream) {
-                console.log(JSON.stringify(row));
+              // For INSERT/UPDATE/DELETE with RETURNING, use execute
+              if (sql.trim().toUpperCase().match(/^(INSERT|UPDATE|DELETE|REPLACE).*RETURNING/i)) {
+                const result = await db.execute(sql, mergedParams);
+                if (Array.isArray(result.data)) {
+                  for (const row of result.data) {
+                    console.log(JSON.stringify(row));
+                  }
+                }
+              } else {
+                // For SELECT queries, use stream
+                const stream = await db.stream(sql, mergedParams);
+                for await (const row of stream) {
+                  console.log(JSON.stringify(row));
+                }
               }
             }
           }
@@ -110,9 +135,20 @@ async function main() {
         const result = await db.execute(sql, params);
         console.log(JSON.stringify(result.data));
       } else if (action === 'stream') {
-        const stream = await db.stream(sql, params);
-        for await (const row of stream) {
-          console.log(JSON.stringify(row));
+        // For INSERT/UPDATE/DELETE with RETURNING, use execute
+        if (sql.trim().toUpperCase().match(/^(INSERT|UPDATE|DELETE|REPLACE).*RETURNING/i)) {
+          const result = await db.execute(sql, params);
+          if (Array.isArray(result.data)) {
+            for (const row of result.data) {
+              console.log(JSON.stringify(row));
+            }
+          }
+        } else {
+          // For SELECT queries, use stream
+          const stream = await db.stream(sql, params);
+          for await (const row of stream) {
+            console.log(JSON.stringify(row));
+          }
         }
       }
       await db.close();
