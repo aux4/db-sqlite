@@ -1,7 +1,7 @@
 import fs from 'fs';
 import Database from '../index.js';
 
-async function main() {
+function parseArguments() {
   const args = process.argv.slice(2);
   const action = args[0] || '';
   const database = args[1] || '';
@@ -23,14 +23,12 @@ async function main() {
     process.exit(1);
   }
 
-  // Process additional arguments (key-value pairs)
   const additionalArgs = args.slice(6);
   
   for (let i = 0; i < additionalArgs.length; i += 2) {
     const key = additionalArgs[i];
     const value = additionalArgs[i + 1];
     if (key && value !== undefined) {
-      // Convert string values to appropriate types
       let convertedValue = value;
       if (value === 'true') convertedValue = true;
       else if (value === 'false') convertedValue = false;
@@ -45,6 +43,10 @@ async function main() {
     process.exit(1);
   }
 
+  return { action, database, query, file, inputStream, params };
+}
+
+function loadSQL(query, file) {
   let sql = query;
   if (!sql && file) {
     try {
@@ -60,96 +62,115 @@ async function main() {
     process.exit(1);
   }
 
+  return sql;
+}
 
+function parseInputData(input) {
+  let items;
+  if (input.startsWith('[') || input.startsWith('{') && !input.includes('\n')) {
+    const data = JSON.parse(input);
+    items = Array.isArray(data) ? data : [data];
+  } else {
+    items = input.split('\n')
+      .filter(line => line.trim())
+      .map(line => JSON.parse(line.trim()));
+  }
+  return items;
+}
+
+async function executeWithItems(db, sql, items, params) {
+  if (items.length > 1) {
+    const paramsList = items.map(item => ({ ...item, ...params }));
+    const result = await db.executeBatch(sql, paramsList);
+    console.log(JSON.stringify(result.data));
+  } else {
+    const mergedParams = { ...items[0], ...params };
+    const result = await db.execute(sql, mergedParams);
+    console.log(JSON.stringify(Array.isArray(result.data) ? result.data : [result.data]));
+  }
+}
+
+async function streamWithItems(db, sql, items, params) {
+  for (const item of items) {
+    const mergedParams = { ...item, ...params };
+    if (sql.trim().toUpperCase().match(/^(INSERT|UPDATE|DELETE|REPLACE).*RETURNING/i)) {
+      const result = await db.execute(sql, mergedParams);
+      if (Array.isArray(result.data)) {
+        for (const row of result.data) {
+          console.log(JSON.stringify(row));
+        }
+      }
+    } else {
+      const stream = await db.stream(sql, mergedParams);
+      for await (const row of stream) {
+        console.log(JSON.stringify(row));
+      }
+    }
+  }
+}
+
+async function processInputStream(db, sql, action, params) {
+  const chunks = [];
+
+  process.stdin.on('data', chunk => {
+    chunks.push(chunk);
+  });
+
+  process.stdin.on('end', async () => {
+    try {
+      const input = Buffer.concat(chunks).toString('utf8').trim();
+      const items = parseInputData(input);
+
+      if (action === 'execute') {
+        await executeWithItems(db, sql, items, params);
+      } else if (action === 'stream') {
+        await streamWithItems(db, sql, items, params);
+      }
+    } catch (error) {
+      console.error(`Error processing input: ${error.message}`);
+      process.exit(1);
+    } finally {
+      await db.close();
+    }
+  });
+}
+
+async function executeQuery(db, sql, params) {
+  const result = await db.execute(sql, params);
+  console.log(JSON.stringify(result.data));
+}
+
+async function streamQuery(db, sql, params) {
+  if (sql.trim().toUpperCase().match(/^(INSERT|UPDATE|DELETE|REPLACE).*RETURNING/i)) {
+    const result = await db.execute(sql, params);
+    if (Array.isArray(result.data)) {
+      for (const row of result.data) {
+        console.log(JSON.stringify(row));
+      }
+    }
+  } else {
+    const stream = await db.stream(sql, params);
+    for await (const row of stream) {
+      console.log(JSON.stringify(row));
+    }
+  }
+}
+
+async function main() {
+  const { action, database, query, file, inputStream, params } = parseArguments();
+  const sql = loadSQL(query, file);
   const db = new Database({ database });
   
   try {
     await db.open();
 
     if (inputStream) {
-      const chunks = [];
-      let totalLength = 0;
-
-      process.stdin.on('data', chunk => {
-        chunks.push(chunk);
-        totalLength += chunk.length;
-      });
-
-      process.stdin.on('end', async () => {
-        try {
-          const input = Buffer.concat(chunks, totalLength).toString('utf8').trim();
-          
-          let items;
-          if (input.startsWith('[') || input.startsWith('{') && !input.includes('\n')) {
-            // Regular JSON array or single object
-            const data = JSON.parse(input);
-            items = Array.isArray(data) ? data : [data];
-          } else {
-            // JSON Lines format (JSONL) - each line is a separate JSON object
-            items = input.split('\n')
-              .filter(line => line.trim())
-              .map(line => JSON.parse(line.trim()));
-          }
-
-          if (action === 'execute') {
-            if (items.length > 1) {
-              // Use batch operation for multiple items
-              const paramsList = items.map(item => ({ ...item, ...params }));
-              const result = await db.executeBatch(sql, paramsList);
-              console.log(JSON.stringify(result.data));
-            } else {
-              // Single item execution
-              const mergedParams = { ...items[0], ...params };
-              const result = await db.execute(sql, mergedParams);
-              console.log(JSON.stringify(Array.isArray(result.data) ? result.data : [result.data]));
-            }
-          } else if (action === 'stream') {
-            for (const item of items) {
-              const mergedParams = { ...item, ...params };
-              // For INSERT/UPDATE/DELETE with RETURNING, use execute
-              if (sql.trim().toUpperCase().match(/^(INSERT|UPDATE|DELETE|REPLACE).*RETURNING/i)) {
-                const result = await db.execute(sql, mergedParams);
-                if (Array.isArray(result.data)) {
-                  for (const row of result.data) {
-                    console.log(JSON.stringify(row));
-                  }
-                }
-              } else {
-                // For SELECT queries, use stream
-                const stream = await db.stream(sql, mergedParams);
-                for await (const row of stream) {
-                  console.log(JSON.stringify(row));
-                }
-              }
-            }
-          }
-        } catch (error) {
-          console.error(`Error processing input: ${error.message}`);
-          process.exit(1);
-        } finally {
-          await db.close();
-        }
-      });
+      await processInputStream(db, sql, action, params);
     } else {
       if (action === 'execute') {
-        const result = await db.execute(sql, params);
-        console.log(JSON.stringify(result.data));
+        await executeQuery(db, sql, params);
       } else if (action === 'stream') {
-        // For INSERT/UPDATE/DELETE with RETURNING, use execute
-        if (sql.trim().toUpperCase().match(/^(INSERT|UPDATE|DELETE|REPLACE).*RETURNING/i)) {
-          const result = await db.execute(sql, params);
-          if (Array.isArray(result.data)) {
-            for (const row of result.data) {
-              console.log(JSON.stringify(row));
-            }
-          }
-        } else {
-          // For SELECT queries, use stream
-          const stream = await db.stream(sql, params);
-          for await (const row of stream) {
-            console.log(JSON.stringify(row));
-          }
-        }
+        await streamQuery(db, sql, params);
       }
       await db.close();
     }

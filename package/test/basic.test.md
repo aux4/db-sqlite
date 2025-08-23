@@ -5,7 +5,7 @@ aux4 db sqlite execute --database test.db --query "CREATE TABLE IF NOT EXISTS us
 ```
 
 ```afterAll
-aux4 db sqlite execute --database test.db --query "DROP TABLE users"
+aux4 db sqlite execute --database test.db --query "DROP TABLE users" && rm -f test.db
 ```
 
 ## Insert single record
