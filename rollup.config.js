@@ -3,19 +3,47 @@ import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
 
 export default {
-  input: 'bin/executable.js',
+  input: 'main.js',
   output: {
-    file: 'package/lib/aux4-sqlite.cjs',
-    format: 'cjs',
-    banner: '#!/usr/bin/env node\n',
-    exports: 'none'
+    file: 'package/lib/aux4-db-sqlite.js',
+    format: 'es',
+    banner: '#!/usr/bin/env node'
   },
-  external: ['@libsql/client'],
   plugins: [
     nodeResolve({
-      preferBuiltins: true
+      preferBuiltins: true,
+      browser: false
     }),
-    commonjs(),
+    commonjs({
+      ignoreDynamicRequires: false,
+      dynamicRequireTargets: [
+        'node_modules/@libsql/*/index.node',
+        'node_modules/@libsql/*/package.json'
+      ]
+    }),
     json()
+  ],
+  external: [
+    'fs',
+    'path',
+    'crypto',
+    'util',
+    'stream',
+    'url',
+    'events',
+    'buffer',
+    'process',
+    'os',
+    'child_process',
+    'zlib',
+    'tls',
+    'net',
+    'http',
+    'https',
+    'querystring',
+    'libsql',
+    /^@libsql\/.*/,
+    /^@neon-rs\/.*/,
+    'detect-libc'
   ]
 };

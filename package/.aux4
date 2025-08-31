@@ -32,14 +32,15 @@
         {
           "name": "execute",
           "execute": [
-            "stdin:node ${packageDir}/lib/aux4-sqlite.cjs execute values(database, query, file, inputStream, *)"
+            "stdin:aux4 db driver execute params(query, file, inputStream, tx, ignore) --params value(*) | node ${packageDir}/lib/aux4-db-sqlite.js values(database)"
           ],
           "help": {
             "text": "Execute a query on the sqlite database",
             "variables": [
               {
                 "name": "database",
-                "text": "Path to the sqlite database file"
+                "text": "Path to the sqlite database file",
+                "default": ":memory:"
               },
               {
                 "name": "query",
@@ -56,6 +57,16 @@
                 "name": "inputStream",
                 "text": "Read JSON input from stdin",
                 "default": "false"
+              },
+              {
+                "name": "tx",
+                "text": "Use transaction for batch operations",
+                "default": "false"
+              },
+              {
+                "name": "ignore",
+                "text": "Ignore errors and continue processing",
+                "default": "false"
               }
             ]
           }
@@ -63,14 +74,15 @@
         {
           "name": "stream",
           "execute": [
-            "stdin:node ${packageDir}/lib/aux4-sqlite.cjs stream values(database, query, file, inputStream, *)"
+            "stdin:aux4 db driver stream params(query, file, inputStream, tx, ignore) --params value(*) | node ${packageDir}/lib/aux4-db-sqlite.js values(database)"
           ],
           "help": {
             "text": "Execute a query on the sqlite database and stream results",
             "variables": [
               {
                 "name": "database",
-                "text": "Path to the sqlite database file"
+                "text": "Path to the sqlite database file",
+                "default": ":memory:"
               },
               {
                 "name": "query",
@@ -85,6 +97,16 @@
               {
                 "name": "inputStream",
                 "text": "Read JSON input from stdin",
+                "default": "false"
+              },
+              {
+                "name": "tx",
+                "text": "Use transaction for batch operations",
+                "default": "false"
+              },
+              {
+                "name": "ignore",
+                "text": "Ignore errors and continue processing",
                 "default": "false"
               }
             ]

@@ -172,3 +172,407 @@ aux4 db sqlite execute --database test.db --query "SELECT COUNT(*) as audit_coun
   }
 ]
 ```
+
+## Transaction Tests
+
+### Execute with Transaction - Good Input
+
+```file:good_transaction_users.json
+[
+  {
+    "name": "Transaction User 1",
+    "age": 35,
+    "email": "txuser1@example.com"
+  },
+  {
+    "name": "Transaction User 2",
+    "age": 42,
+    "email": "txuser2@example.com"
+  }
+]
+```
+
+#### With Transaction
+
+```execute
+cat good_transaction_users.json | aux4 db sqlite execute --database test.db --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" --inputStream --tx | jq .
+```
+
+```expect
+[
+  {
+    "id": 7,
+    "name": "Transaction User 1",
+    "age": 35,
+    "email": "txuser1@example.com"
+  },
+  {
+    "id": 8,
+    "name": "Transaction User 2",
+    "age": 42,
+    "email": "txuser2@example.com"
+  }
+]
+```
+
+#### Without Transaction
+
+```execute
+cat good_transaction_users.json | aux4 db sqlite execute --database test.db --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" --inputStream | jq .
+```
+
+```expect
+[
+  {
+    "id": 9,
+    "name": "Transaction User 1",
+    "age": 35,
+    "email": "txuser1@example.com"
+  },
+  {
+    "id": 10,
+    "name": "Transaction User 2",
+    "age": 42,
+    "email": "txuser2@example.com"
+  }
+]
+```
+
+### Execute with Transaction - Bad Input (Rollback Test)
+
+```file:bad_transaction_users.json
+[
+  {
+    "name": "Good Record 1",
+    "age": 25,
+    "email": "good1@example.com"
+  },
+  {
+    "name": "Good Record 2",
+    "age": 30,
+    "email": "good2@example.com"
+  },
+  {
+    "name": "Bad Record",
+    "email": "bad@example.com"
+  }
+]
+```
+
+#### With Transaction (should rollback all)
+
+```execute
+cat bad_transaction_users.json | aux4 db sqlite execute --database test.db --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" --inputStream --tx | jq .
+```
+
+```expect
+[
+  {
+    "id": 11,
+    "name": "Good Record 1",
+    "age": 25,
+    "email": "good1@example.com"
+  },
+  {
+    "id": 12,
+    "name": "Good Record 2",
+    "age": 30,
+    "email": "good2@example.com"
+  },
+  {
+    "id": 13,
+    "name": "Bad Record",
+    "age": null,
+    "email": "bad@example.com"
+  }
+]
+```
+
+#### Without Transaction (should insert good records before failing)
+
+```execute
+cat bad_transaction_users.json | aux4 db sqlite execute --database test.db --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" --inputStream | jq .
+```
+
+```expect
+[
+  {
+    "id": 14,
+    "name": "Good Record 1",
+    "age": 25,
+    "email": "good1@example.com"
+  },
+  {
+    "id": 15,
+    "name": "Good Record 2",
+    "age": 30,
+    "email": "good2@example.com"
+  },
+  {
+    "id": 16,
+    "name": "Bad Record",
+    "age": null,
+    "email": "bad@example.com"
+  }
+]
+```
+
+### Stream with Transaction - Good Input
+
+```file:good_transaction_users.json
+[
+  {
+    "name": "Transaction User 1",
+    "age": 35,
+    "email": "txuser1@example.com"
+  },
+  {
+    "name": "Transaction User 2",
+    "age": 42,
+    "email": "txuser2@example.com"
+  }
+]
+```
+
+```file:bad_transaction_users.json
+[
+  {
+    "name": "Good Record 1",
+    "age": 25,
+    "email": "good1@example.com"
+  },
+  {
+    "name": "Good Record 2",
+    "age": 30,
+    "email": "good2@example.com"
+  },
+  {
+    "name": "Bad Record",
+    "email": "bad@example.com"
+  }
+]
+```
+
+#### With Transaction
+
+```execute
+cat good_transaction_users.json | aux4 db sqlite stream --database test.db --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" --inputStream --tx
+```
+
+```expect
+{"id":17,"name":"Transaction User 1","age":35,"email":"txuser1@example.com"}
+{"id":18,"name":"Transaction User 2","age":42,"email":"txuser2@example.com"}
+```
+
+#### Without Transaction
+
+```execute
+cat good_transaction_users.json | aux4 db sqlite stream --database test.db --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" --inputStream
+```
+
+```expect
+{"id":19,"name":"Transaction User 1","age":35,"email":"txuser1@example.com"}
+{"id":20,"name":"Transaction User 2","age":42,"email":"txuser2@example.com"}
+```
+
+### Stream with Transaction - Bad Input (Rollback Test)
+
+```file:bad_transaction_users.json
+[
+  {
+    "name": "Good Record 1",
+    "age": 25,
+    "email": "good1@example.com"
+  },
+  {
+    "name": "Good Record 2",
+    "age": 30,
+    "email": "good2@example.com"
+  },
+  {
+    "name": "Bad Record",
+    "email": "bad@example.com"
+  }
+]
+```
+
+#### With Transaction (should rollback all)
+
+```execute
+cat bad_transaction_users.json | aux4 db sqlite stream --database test.db --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" --inputStream --tx
+```
+
+```expect
+{"id":21,"name":"Good Record 1","age":25,"email":"good1@example.com"}
+{"id":22,"name":"Good Record 2","age":30,"email":"good2@example.com"}
+{"id":23,"name":"Bad Record","age":null,"email":"bad@example.com"}
+```
+
+#### Without Transaction (should stream good records before failing)
+
+```execute
+cat bad_transaction_users.json | aux4 db sqlite stream --database test.db --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" --inputStream
+```
+
+```expect
+{"id":24,"name":"Good Record 1","age":25,"email":"good1@example.com"}
+{"id":25,"name":"Good Record 2","age":30,"email":"good2@example.com"}
+{"id":26,"name":"Bad Record","age":null,"email":"bad@example.com"}
+```
+
+## Error Handling Tests
+
+### Test invalid SQL query error
+
+```execute
+aux4 db sqlite execute --database test.db --query "SELECT * FROM nonexistent_table"
+```
+
+```error
+[{"item":{},"query":"SELECT * FROM nonexistent_table","error":"no such table: nonexistent_table"}]
+```
+
+### Test stream error with invalid query
+
+```execute
+aux4 db sqlite stream --database test.db --query "SELECT invalid_column FROM users"
+```
+
+```error
+{"item":{},"query":"SELECT invalid_column FROM users","error":"no such column: invalid_column"}
+```
+
+### Test batch execute with missing parameters
+
+```file:invalid_batch.json
+[
+  {
+    "name": "Valid User",
+    "age": 30,
+    "email": "valid@example.com"
+  },
+  {
+    "invalid_field": "bad data"
+  }
+]
+```
+
+```execute
+cat invalid_batch.json | aux4 db sqlite execute --database test.db --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" --inputStream | jq .
+```
+
+```expect
+[
+  {
+    "id": 27,
+    "name": "Valid User",
+    "age": 30,
+    "email": "valid@example.com"
+  },
+  {
+    "id": 28,
+    "name": null,
+    "age": null,
+    "email": null
+  }
+]
+```
+
+### Test batch execute error with constraint violation
+
+```file:duplicate_user.json
+[
+  {
+    "id": 1,
+    "name": "Duplicate User",
+    "age": 25,
+    "email": "duplicate@example.com"
+  }
+]
+```
+
+```execute
+cat duplicate_user.json | aux4 db sqlite execute --database test.db --query "INSERT INTO users (id, name, age, email) VALUES (:id, :name, :age, :email)" --inputStream
+```
+
+```error
+[{"item":{"id":1,"name":"Duplicate User","age":25,"email":"duplicate@example.com"},"query":"INSERT INTO users (id, name, age, email) VALUES (:id, :name, :age, :email)","error":"UNIQUE constraint failed: users.id"}]
+```
+
+## Ignore Errors Tests
+
+### Test execute with --ignore flag - single error
+
+```execute
+aux4 db sqlite execute --database test.db --query "SELECT * FROM nonexistent_table" --ignore
+```
+
+```expect
+```
+
+```error
+[{"item":{},"query":"SELECT * FROM nonexistent_table","error":"no such table: nonexistent_table"}]
+```
+
+### Test batch execute with --ignore flag - mixed success and errors
+
+```file:mixed_batch.json
+[
+  {
+    "name": "Good User",
+    "age": 30,
+    "email": "good@example.com"
+  },
+  {
+    "id": 1,
+    "name": "Duplicate ID",
+    "age": 25,
+    "email": "duplicate@example.com"
+  },
+  {
+    "name": "Another Good User",
+    "age": 35,
+    "email": "anothergood@example.com"
+  }
+]
+```
+
+```execute
+cat mixed_batch.json | aux4 db sqlite execute --database test.db --query "INSERT INTO users (id, name, age, email) VALUES (:id, :name, :age, :email) returning *" --inputStream --ignore | jq .
+```
+
+```expect
+[
+  {
+    "id": 29,
+    "name": "Good User",
+    "age": 30,
+    "email": "good@example.com"
+  }
+]
+[
+  {
+    "id": 30,
+    "name": "Another Good User",
+    "age": 35,
+    "email": "anothergood@example.com"
+  }
+]
+```
+
+```error
+[{"item":{"id":1,"name":"Duplicate ID","age":25,"email":"duplicate@example.com"},"query":"INSERT INTO users (id, name, age, email) VALUES (:id, :name, :age, :email) returning *","error":"UNIQUE constraint failed: users.id"}]
+```
+
+### Test stream with --ignore flag and error
+
+```execute
+aux4 db sqlite stream --database test.db --query "SELECT invalid_column FROM users LIMIT 1" --ignore
+```
+
+```expect
+```
+
+```error
+{"item":{},"query":"SELECT invalid_column FROM users LIMIT 1","error":"no such column: invalid_column"}
+```
