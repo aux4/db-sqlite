@@ -118,6 +118,114 @@ aux4 db sqlite stream --database my.db --query "SELECT id, name FROM users" | \
     --inputStream
 ```
 
+## Output Formats
+
+### Execute Command Output
+
+The `execute` command returns results as JSON arrays:
+
+**Success:**
+```json
+[
+  {"id": 1, "name": "Alice", "age": 30, "email": "alice@example.com"},
+  {"id": 2, "name": "Bob", "age": 25, "email": "bob@example.com"}
+]
+```
+
+**Errors (to stderr):**
+```json
+[{"item": {"name": "Bad Data"}, "query": "INSERT INTO users...", "error": "NOT NULL constraint failed: users.age"}]
+```
+
+### Stream Command Output
+
+The `stream` command returns newline-delimited JSON objects (NDJSON):
+
+```json
+{"id": 1, "name": "Alice", "age": 30, "email": "alice@example.com"}
+{"id": 2, "name": "Bob", "age": 25, "email": "bob@example.com"}
+```
+
+**Errors (to stderr):**
+```json
+{"item": {}, "query": "SELECT invalid_column FROM users", "error": "no such column: invalid_column"}
+```
+
+## Advanced Features
+
+### Batch Processing with inputStream
+
+Process multiple records from JSON input:
+
+```bash
+# Create JSON file with batch data
+cat > users.json << EOF
+[
+  {"name": "User1", "age": 25, "email": "user1@example.com"},
+  {"name": "User2", "age": 30, "email": "user2@example.com"}
+]
+EOF
+
+# Execute batch insert
+cat users.json | aux4 db sqlite execute \
+  --database my.db \
+  --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" \
+  --inputStream
+```
+
+### Parameter Override
+
+CLI parameters override JSON input parameters:
+
+```bash
+# Override email for all records in the batch
+cat users.json | aux4 db sqlite execute \
+  --database my.db \
+  --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" \
+  --email "override@example.com" \
+  --inputStream
+```
+
+### Transaction Management
+
+**With transactions (`--tx`):**
+- All operations execute within a single transaction
+- On error, all changes are rolled back
+- Ensures data consistency for batch operations
+
+```bash
+# Transactional batch - all or nothing
+cat batch.json | aux4 db sqlite execute \
+  --database my.db \
+  --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" \
+  --inputStream --tx
+```
+
+**Without transactions:**
+- Each operation commits individually
+- Successful operations persist even if later ones fail
+- Faster for large batches but less consistent
+
+### Error Handling
+
+**Default behavior (`--ignore` not set):**
+- Stop on first error
+- Exit with non-zero code
+- Error details sent to stderr
+
+**With `--ignore` flag:**
+- Continue processing remaining records
+- Output successful results to stdout
+- Send errors to stderr but exit with zero code
+
+```bash
+# Process all records, ignoring failures
+cat mixed_data.json | aux4 db sqlite execute \
+  --database my.db \
+  --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" \
+  --inputStream --ignore
+```
+
 ## Examples
 
 ### Basic Query
@@ -135,14 +243,55 @@ aux4 db sqlite execute \
   --name "Dave" --age 45 --email dave@example.com
 ```
 
+### Query with Parameters
+
+```bash
+aux4 db sqlite execute \
+  --database my.db \
+  --query "SELECT * FROM users WHERE age >= :minAge AND email LIKE :domain" \
+  --minAge 25 --domain "%@example.com"
+```
+
 ### Transaction Rollback Demonstration
 
 ```bash
 # Good and bad records in a single batch; --tx rolls back all if any fail
-echo '[{"name":"Good","age":20,"email":"good@example.com"},{"name":null}]' | \
+echo '[{"name":"Good","age":20,"email":"good@example.com"},{"name":"Bad"}]' | \
   aux4 db sqlite execute --database my.db \
     --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" \
     --inputStream --tx
+```
+
+### Stream Processing Pipeline
+
+```bash
+# Create audit table
+aux4 db sqlite execute --database my.db \
+  --query "CREATE TABLE user_audit (audit_id INTEGER PRIMARY KEY, user_id INTEGER, user_name TEXT, audit_timestamp TEXT DEFAULT CURRENT_TIMESTAMP)"
+
+# Stream users and insert audit records
+aux4 db sqlite stream --database my.db --query "SELECT id, name FROM users WHERE age >= 25" | \
+  aux4 db sqlite stream --database my.db \
+    --query "INSERT INTO user_audit (user_id, user_name) VALUES (:id, :name) returning audit_id" \
+    --inputStream
+```
+
+### Error Recovery with --ignore
+
+```bash
+# Process mixed data, continuing despite errors
+cat > mixed_data.json << EOF
+[
+  {"name": "Valid User", "age": 30, "email": "valid@example.com"},
+  {"invalid_field": "bad data"},
+  {"name": "Another Valid User", "age": 25, "email": "another@example.com"}
+]
+EOF
+
+cat mixed_data.json | aux4 db sqlite execute \
+  --database my.db \
+  --query "INSERT INTO users (name, age, email) VALUES (:name, :age, :email) returning *" \
+  --inputStream --ignore
 ```
 
 ## Real-World Scenario
