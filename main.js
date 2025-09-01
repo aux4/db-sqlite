@@ -1,85 +1,138 @@
 import Database from "libsql";
 
-const args = process.argv.slice(2);
-if (args.length < 1) {
-  console.error("Usage: aux4-db-sqlite <database_path>");
-  process.exit(1);
+const AUX4_PARAMS = ['database', 'action', 'sql', 'inputStream', 'tx', 'ignore', 'aux4HomeDir', 'configDir', 'packageDir', 'query', 'file'];
+
+function validateArgs() {
+  const args = process.argv.slice(2);
+  if (args.length < 1) {
+    console.error("Usage: aux4-db-sqlite <database_path>");
+    process.exit(1);
+  }
+  return args[0];
 }
 
-const databasePath = args[0];
+function createErrorOutput(item, query, error) {
+  return {
+    item: item || null,
+    query: query || 'unknown',
+    error: error
+  };
+}
 
-let inputData = "";
-process.stdin.setEncoding("utf8");
+function filterAux4Params(params) {
+  const filtered = { ...params };
+  AUX4_PARAMS.forEach(param => delete filtered[param]);
+  return filtered;
+}
 
-process.stdin.on("data", chunk => {
-  inputData += chunk;
-});
+function outputError(errorOutput, isArray = true) {
+  const output = isArray ? [errorOutput] : errorOutput;
+  console.error(JSON.stringify(output));
+}
 
-process.stdin.on("end", async () => {
+function exitOnError(shouldIgnore) {
+  if (!shouldIgnore) {
+    process.exit(1);
+  }
+}
+
+function parseInput(trimmedInput) {
   try {
+    const parsed = JSON.parse(trimmedInput);
+    validateRequest(parsed);
+    return { type: 'single', data: parsed };
+  } catch (singleJsonError) {
+    const lines = trimmedInput.split("\n").filter(line => line.trim());
+    if (lines.length > 1) {
+      try {
+        const items = lines.map(line => {
+          const parsed = JSON.parse(line.trim());
+          validateRequest(parsed);
+          return parsed;
+        });
+        return { type: 'ndjson', data: items };
+      } catch (ndjsonError) {
+        throw singleJsonError;
+      }
+    }
+    throw singleJsonError;
+  }
+}
+
+function validateRequest(request) {
+  if (!request || typeof request !== 'object') {
+    throw new Error('Request must be an object');
+  }
+  if (!request.action) {
+    throw new Error('Request must have an action property');
+  }
+  if (!request.sql) {
+    throw new Error('Request must have an sql property');
+  }
+}
+
+function readStdinData() {
+  return new Promise((resolve, reject) => {
+    let inputData = "";
+    process.stdin.setEncoding("utf8");
+    
+    process.stdin.on("data", chunk => {
+      inputData += chunk;
+    });
+    
+    process.stdin.on("end", () => resolve(inputData));
+    process.stdin.on("error", reject);
+  });
+}
+
+async function main() {
+  const databasePath = validateArgs();
+  
+  try {
+    const inputData = await readStdinData();
     const trimmedInput = inputData.trim();
+    
     if (!trimmedInput) {
       process.exit(4);
     }
 
-    try {
-      const request = JSON.parse(trimmedInput);
-      await processRequest(request);
-      return;
-    } catch (singleJsonError) {
-      const lines = trimmedInput.split("\n").filter(line => line.trim());
-      if (lines.length > 1) {
-        try {
-          // Parse as NDJSON - each line should be a JSON object
-          const items = lines.map(line => JSON.parse(line.trim()));
-
-          // For stream input, we need to create a proper batch request
-          // The aux4 command should pass the SQL and action via command line args
-          // For now, process each item as individual requests
-          for (const item of items) {
-            if (item.action && item.sql) {
-              try {
-                await processRequest(item);
-              } catch (error) {
-                const errorOutput = {
-                  item: item,
-                  query: item.sql || 'unknown',
-                  error: error.message
-                };
-                console.error(JSON.stringify(errorOutput));
-              }
-            }
+    const parsedInput = parseInput(trimmedInput);
+    
+    if (parsedInput.type === 'single') {
+      await processRequest(databasePath, parsedInput.data);
+    } else {
+      for (const item of parsedInput.data) {
+        if (item.action && item.sql) {
+          try {
+            await processRequest(databasePath, item);
+          } catch (error) {
+            const errorOutput = createErrorOutput(item, item.sql, error.message);
+            outputError(errorOutput, false);
           }
-        } catch (ndjsonError) {
-          throw singleJsonError;
         }
-      } else {
-        throw singleJsonError;
       }
     }
   } catch (error) {
-    const errorOutput = {
-      item: inputData ? inputData.trim() : null,
-      query: 'unknown',
-      error: `Error parsing JSON input: ${error.message}`
-    };
-    console.error(JSON.stringify(errorOutput));
+    const errorOutput = createErrorOutput(
+      inputData ? inputData.trim() : null,
+      'unknown',
+      `Error parsing JSON input: ${error.message}`
+    );
+    outputError(errorOutput, false);
     process.exit(1);
   }
-});
+}
 
-async function processRequest(request) {
+main();
+
+async function processRequest(databasePath, request) {
   let db;
 
   try {
     db = new Database(databasePath);
   } catch (error) {
-    const errorOutput = {
-      item: request || null,
-      query: request?.sql || 'unknown',
-      error: error.message
-    };
-    console.error(JSON.stringify(errorOutput));
+    const errorOutput = createErrorOutput(request, request?.sql, error.message);
+    outputError(errorOutput, false);
     process.exit(1);
   }
 
@@ -98,12 +151,8 @@ async function processRequest(request) {
         await streamBatch(db, request);
         break;
       default:
-        const errorOutput = {
-          item: request || null,
-          query: request?.sql || 'unknown',
-          error: `Unknown action: ${request.action}`
-        };
-        console.error(JSON.stringify(errorOutput));
+        const errorOutput = createErrorOutput(request, request?.sql, `Unknown action: ${request.action}`);
+        outputError(errorOutput, false);
         process.exit(1);
     }
   } finally {
@@ -121,24 +170,16 @@ function convertParameterSyntax(sql) {
 async function executeQuery(db, request) {
   const convertedSql = convertParameterSyntax(request.sql);
   const params = request.params || {};
-  
-  // Filter out non-SQL parameters for the item field in error output
-  const { database, action, sql, inputStream, tx, ignore, ...sqlParams } = params;
+  const sqlParams = filterAux4Params(params);
 
   try {
     const stmt = db.prepare(convertedSql);
     const rows = stmt.all(params);
     console.log(JSON.stringify(rows));
   } catch (error) {
-    const errorOutput = {
-      item: sqlParams,
-      query: request.sql,
-      error: error.message
-    };
-    console.error(JSON.stringify([errorOutput]));
-    if (!request.ignore) {
-      process.exit(1);
-    }
+    const errorOutput = createErrorOutput(sqlParams, request.sql, error.message);
+    outputError(errorOutput);
+    exitOnError(request.ignore);
   }
 }
 
@@ -148,6 +189,36 @@ async function executeBatch(db, request) {
   } else {
     await executeBatchWithoutTransaction(db, request);
   }
+}
+
+function processItemInBatch(stmt, item, request, errors) {
+  try {
+    const rows = stmt.all(item);
+    return { success: true, rows };
+  } catch (error) {
+    const cleanItem = filterAux4Params(item);
+    const errorOutput = createErrorOutput(cleanItem, request.sql, error.message);
+    errors.push(errorOutput);
+    return { success: false, error };
+  }
+}
+
+function outputBatchResults(results, hasAnyResults, itemCount) {
+  if (!hasAnyResults) {
+    console.log(JSON.stringify({ success: true, count: itemCount }));
+  } else {
+    console.log(JSON.stringify(results));
+  }
+}
+
+function handleBatchErrors(errors, request, fallbackError = null) {
+  if (errors.length > 0) {
+    console.error(JSON.stringify(errors));
+  } else if (fallbackError) {
+    const errorOutput = createErrorOutput(null, request.sql, fallbackError.message);
+    outputError(errorOutput);
+  }
+  exitOnError(request.ignore);
 }
 
 async function executeBatchWithTransaction(db, request) {
@@ -161,21 +232,14 @@ async function executeBatchWithTransaction(db, request) {
       let hasAnyResults = false;
 
       for (const item of items) {
-        try {
-          const rows = stmt.all(item);
-          results.push(...rows);
-          if (rows.length > 0) {
+        const result = processItemInBatch(stmt, item, request, errors);
+        if (result.success) {
+          results.push(...result.rows);
+          if (result.rows.length > 0) {
             hasAnyResults = true;
           }
-        } catch (error) {
-          // Filter out aux4 parameters from the item for clean error reporting
-          const { database, action, sql, inputStream, tx, ignore, aux4HomeDir, configDir, packageDir, query, file, ...cleanItem } = item;
-          errors.push({
-            item: cleanItem,
-            query: request.sql,
-            error: error.message
-          });
-          throw error;
+        } else {
+          throw result.error;
         }
       }
 
@@ -183,25 +247,9 @@ async function executeBatchWithTransaction(db, request) {
     });
 
     const { results, hasAnyResults } = transaction(request.items);
-
-    if (!hasAnyResults) {
-      console.log(JSON.stringify({ success: true, count: request.items.length }));
-    } else {
-      console.log(JSON.stringify(results));
-    }
+    outputBatchResults(results, hasAnyResults, request.items.length);
   } catch (error) {
-    if (errors.length > 0) {
-      console.error(JSON.stringify(errors));
-    } else {
-      console.error(JSON.stringify([{
-        item: null,
-        query: request.sql,
-        error: error.message
-      }]));
-    }
-    if (!request.ignore) {
-      process.exit(1);
-    }
+    handleBatchErrors(errors, request, error);
   }
 }
 
@@ -215,73 +263,66 @@ async function executeBatchWithoutTransaction(db, request) {
   try {
     stmt = db.prepare(convertedSql);
   } catch (error) {
-    console.error(JSON.stringify([{
-      item: null,
-      query: request.sql,
-      error: error.message
-    }]));
-    if (!request.ignore) {
-      process.exit(1);
-    }
+    const errorOutput = createErrorOutput(null, request.sql, error.message);
+    outputError(errorOutput);
+    exitOnError(request.ignore);
+    return;
   }
 
   for (const item of request.items) {
-    try {
-      const rows = stmt.all(item);
-      results.push(...rows);
-      if (rows.length > 0) {
+    const result = processItemInBatch(stmt, item, request, errors);
+    if (result.success) {
+      results.push(...result.rows);
+      if (result.rows.length > 0) {
         hasAnyResults = true;
       }
-    } catch (error) {
-      // Filter out aux4 parameters from the item for clean error reporting
-      const { database, action, sql, inputStream, tx, ignore, aux4HomeDir, configDir, packageDir, query, file, ...cleanItem } = item;
-      errors.push({
-        item: cleanItem,
-        query: request.sql,
-        error: error.message
-      });
     }
   }
 
   if (errors.length > 0) {
     console.error(JSON.stringify(errors));
-    if (!request.ignore) {
-      process.exit(1);
-    }
+    exitOnError(request.ignore);
   }
 
-  // Always output results, even if there were errors (when ignore is true)
   if (!hasAnyResults && errors.length === 0) {
-    console.log(JSON.stringify({ success: true, count: request.items.length }));
+    outputBatchResults([], false, request.items.length);
   } else if (hasAnyResults) {
-    console.log(JSON.stringify(results));
+    outputBatchResults(results, true, request.items.length);
   }
+}
+
+function streamRows(rows) {
+  rows.forEach(row => {
+    console.log(JSON.stringify(row));
+  });
 }
 
 async function streamQuery(db, request) {
   const convertedSql = convertParameterSyntax(request.sql);
   const params = request.params || {};
-  
-  // Filter out non-SQL parameters for the item field in error output
-  const { database, action, sql, inputStream, tx, ignore, ...sqlParams } = params;
+  const sqlParams = filterAux4Params(params);
 
   try {
     const stmt = db.prepare(convertedSql);
     const rows = stmt.all(params);
-
-    rows.forEach(row => {
-      console.log(JSON.stringify(row));
-    });
+    streamRows(rows);
   } catch (error) {
-    const errorOutput = {
-      item: sqlParams,
-      query: request.sql,
-      error: error.message
-    };
-    console.error(JSON.stringify(errorOutput));
-    if (!request.ignore) {
-      process.exit(1);
-    }
+    const errorOutput = createErrorOutput(sqlParams, request.sql, error.message);
+    outputError(errorOutput, false);
+    exitOnError(request.ignore);
+  }
+}
+
+function processStreamItem(stmt, item, request) {
+  try {
+    const rows = stmt.all(item);
+    streamRows(rows);
+    return { success: true };
+  } catch (error) {
+    const cleanItem = filterAux4Params(item);
+    const errorOutput = createErrorOutput(cleanItem, request.sql, error.message);
+    outputError(errorOutput, false);
+    return { success: false, error };
   }
 }
 
@@ -294,55 +335,21 @@ async function streamBatch(db, request) {
     if (request.tx) {
       const transaction = db.transaction(items => {
         for (const item of items) {
-          try {
-            const rows = stmt.all(item);
-            rows.forEach(row => {
-              console.log(JSON.stringify(row));
-            });
-          } catch (error) {
-            // Filter out aux4 parameters from the item for clean error reporting
-            const { database, action, sql, inputStream, tx, ignore, aux4HomeDir, configDir, packageDir, query, file, ...cleanItem } = item;
-            const errorOutput = {
-              item: cleanItem,
-              query: request.sql,
-              error: error.message
-            };
-            console.error(JSON.stringify(errorOutput));
-            if (!request.ignore) {
-              throw error;
-            }
+          const result = processStreamItem(stmt, item, request);
+          if (!result.success && !request.ignore) {
+            throw result.error;
           }
         }
       });
       transaction(request.items);
     } else {
       for (const item of request.items) {
-        try {
-          const rows = stmt.all(item);
-          rows.forEach(row => {
-            console.log(JSON.stringify(row));
-          });
-        } catch (error) {
-          // Filter out aux4 parameters from the item for clean error reporting
-          const { database, action, sql, inputStream, tx, ignore, aux4HomeDir, configDir, packageDir, query, file, ...cleanItem } = item;
-          const errorOutput = {
-            item: cleanItem,
-            query: request.sql,
-            error: error.message
-          };
-          console.error(JSON.stringify(errorOutput));
-        }
+        processStreamItem(stmt, item, request);
       }
     }
   } catch (error) {
-    const errorOutput = {
-      item: null,
-      query: request.sql,
-      error: error.message
-    };
-    console.error(JSON.stringify(errorOutput));
-    if (!request.ignore) {
-      process.exit(1);
-    }
+    const errorOutput = createErrorOutput(null, request.sql, error.message);
+    outputError(errorOutput, false);
+    exitOnError(request.ignore);
   }
 }
