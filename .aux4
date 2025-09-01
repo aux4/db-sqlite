@@ -4,23 +4,12 @@
       "name": "main",
       "commands": [
         {
-          "name": "install",
-          "execute": [
-            "npm install"
-          ],
-          "help": {
-            "text": "Install Node.js dependencies"
-          }
-        },
-        {
           "name": "build",
           "execute": [
-            "aux4 install --include=optional",
-            "npm run build",
-            "chmod +x ${packageDir}/package/lib/aux4-db-sqlite.js"
+            "npm run build"
           ],
           "help": {
-            "text": "Build and bundle the Node.js project"
+            "text": "Build aux4/db-sqlite"
           }
         }
       ]
