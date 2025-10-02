@@ -8,7 +8,7 @@
     "aux4-db-sqlite": "./package/lib/aux4-db-sqlite.js"
   },
   "scripts": {
-    "build": "rollup -c",
+    "build": "rollup -c && cd package/lib && npm install",
     "dev": "node main.js"
   },
   "dependencies": {

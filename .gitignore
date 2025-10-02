@@ -68,4 +68,5 @@ local-test
 .DS_Store
 
 *.db
-package/lib
+package/lib/node_modules
+package/lib/aux4-db-sqlite.js

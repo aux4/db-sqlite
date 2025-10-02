@@ -1,0 +1,16 @@
+{
+  "type": "module",
+  "dependencies": {
+    "libsql": "^0.5.20"
+  },
+  "optionalDependencies": {
+    "@libsql/darwin-x64": "^0.5.20",
+    "@libsql/linux-arm-gnueabihf": "^0.5.20",
+    "@libsql/linux-arm-musleabihf": "^0.5.20",
+    "@libsql/linux-arm64-gnu": "^0.5.20",
+    "@libsql/linux-arm64-musl": "^0.5.20",
+    "@libsql/linux-x64-gnu": "^0.5.20",
+    "@libsql/linux-x64-musl": "^0.5.20",
+    "@libsql/win32-x64-msvc": "^0.5.20"
+  }
+}
