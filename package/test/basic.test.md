@@ -508,6 +508,7 @@ aux4 db sqlite execute --database test.db --query "SELECT * FROM nonexistent_tab
 ```
 
 ```expect
+
 ```
 
 ```error
@@ -571,6 +572,7 @@ aux4 db sqlite stream --database test.db --query "SELECT invalid_column FROM use
 ```
 
 ```expect
+
 ```
 
 ```error
