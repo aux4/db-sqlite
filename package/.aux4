@@ -32,7 +32,7 @@
         {
           "name": "execute",
           "execute": [
-            "stdin:aux4 db driver execute params(query, file, inputStream, tx, ignore) --params value(*) | node ${packageDir}/lib/aux4-db-sqlite.js values(database)"
+            "stdin:aux4 db driver prepare execute params(query, file, inputStream, tx, ignore) --params value(*) | node ${packageDir}/lib/aux4-db-sqlite.js values(database)"
           ],
           "help": {
             "text": "Execute a query on the sqlite database",
@@ -74,7 +74,7 @@
         {
           "name": "stream",
           "execute": [
-            "stdin:aux4 db driver stream params(query, file, inputStream, tx, ignore) --params value(*) | node ${packageDir}/lib/aux4-db-sqlite.js values(database)"
+            "stdin:aux4 db driver prepare stream params(query, file, inputStream, tx, ignore) --params value(*) | node ${packageDir}/lib/aux4-db-sqlite.js values(database)"
           ],
           "help": {
             "text": "Execute a query on the sqlite database and stream results",
