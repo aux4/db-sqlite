@@ -32,6 +32,9 @@ aux4 db sqlite execute \
 
 - [`aux4 db sqlite execute`](./commands/db/sqlite/execute) - Execute SQL statements on a SQLite database and return all results as a JSON array.
 - [`aux4 db sqlite stream`](./commands/db/sqlite/stream) - Execute SQL statements and stream each row as a newline-delimited JSON object.
+- [`aux4 db sqlite describe`](./commands/db/sqlite/describe) - Describe the columns of a table as a canonical JSON array (see [Schema Introspection](#schema-introspection)).
+- [`aux4 db sqlite desc`](./commands/db/sqlite/desc) - Alias of `describe`.
+- [`aux4 db sqlite list tables`](./commands/db/sqlite/list/tables) - List the tables in the database.
 
 ### Command Reference
 
@@ -306,6 +309,102 @@ aux4 db sqlite execute --database my.db --query "CREATE TABLE IF NOT EXISTS user
 aux4 db sqlite stream --database my.db --query "SELECT id, name FROM users WHERE age >= 18" | \
   aux4 db sqlite stream --database my.db --query "INSERT INTO user_audit (user_id, audit_name) VALUES (:id, :name) returning audit_id" --inputStream
 ```
+
+## Schema Introspection
+
+The introspection commands let you explore a database's structure — ideal for AI agents and scripts that need to discover tables and columns before querying. They reuse the same connection flag as `execute`: `--database`, the path to the SQLite file.
+
+**SQLite is a single-file engine.** There is no server, no separate schema, and no cross-database namespace — a database *is* a file. So `--database` (the file path) is the only scope, and there is deliberately **no `--schema` flag**, **no `list databases`**, and **no `list schemas`**. SQLite also has no column or table comments and no MySQL-style `extra` metadata, so `describe` never emits `comment` or `extra` keys.
+
+#### aux4 db sqlite describe
+
+Return the columns of a table as a canonical JSON array, one object per column, in definition order.
+
+Usage:
+```bash
+aux4 db sqlite describe \
+  [--database <path>] \
+  --table <table_name>
+```
+
+Options:
+
+- `--database <path>`     Path to the SQLite file (default: `:memory:`)
+- `--table <table_name>`  Name of the table to describe (bound safely as a named parameter via `pragma_table_info(:table)`)
+
+Example:
+
+```bash
+aux4 db sqlite describe --database my.db --table product
+```
+
+```json
+[
+  {"name":"id","type":"INTEGER","nullable":true,"key":"PRI"},
+  {"name":"name","type":"TEXT","nullable":false},
+  {"name":"price","type":"NUMERIC","nullable":true,"default":"0"},
+  {"name":"sku","type":"TEXT","nullable":true}
+]
+```
+
+Only keys that carry a value are returned — `null` and empty (`""`) fields are omitted, so a plain column is just `{"name", "type", "nullable"}`. `nullable` is always present as a real JSON boolean.
+
+**SQLite quirk:** a column declared `INTEGER PRIMARY KEY` is an alias for the internal `rowid`, and `pragma_table_info` reports its `notnull` flag as `0` — so `describe` faithfully reports it as `nullable: true` (as shown for `id` above) even though it can never actually hold `NULL`. A regular `NOT NULL` column reports `nullable: false`.
+
+#### aux4 db sqlite desc
+
+Alias of `describe` — accepts the exact same flags and produces the exact same output.
+
+```bash
+aux4 db sqlite desc --database my.db --table product
+```
+
+#### aux4 db sqlite list tables
+
+List the tables in the database. Each row carries only the table `name` — SQLite has no meaningful namespace (database/schema) to qualify a table with, so `name` is the only key. Internal `sqlite_*` tables are excluded.
+
+Usage:
+```bash
+aux4 db sqlite list tables \
+  [--database <path>]
+```
+
+Example:
+
+```bash
+aux4 db sqlite list tables --database my.db
+```
+
+```json
+[
+  {"name":"product"},
+  {"name":"tag"}
+]
+```
+
+### Canonical Output Schema
+
+Introspection output uses a **fixed, dialect-independent** set of keys so that tooling works identically across every `aux4/db-*` adapter. A key is present only when it carries a value — `null` and empty (`""`) fields are omitted rather than emitted, keeping the output compact.
+
+`describe` — one object per column. When present, keys appear in this order:
+
+| Key | Type | Presence |
+|-----|------|----------|
+| `name` | string | always |
+| `type` | string | always |
+| `nullable` | boolean | always — `true` if the column accepts `NULL`, else `false` |
+| `default` | string | only when the column has a default |
+| `key` | string | only when set — `PRI` for a primary-key column |
+
+SQLite has no column comments and no `extra` metadata, so `comment` and `extra` (present on some other adapters such as MySQL) are **never** emitted here.
+
+`list tables` — one object per table:
+
+| Key | Type | Presence |
+|-----|------|----------|
+| `name` | string | always |
+
+Unlike server-based engines, SQLite tables are not qualified by a `database` or `schema` namespace, so no such key is emitted.
 
 ## License
 

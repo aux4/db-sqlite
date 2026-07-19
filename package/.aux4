@@ -111,6 +111,76 @@
               }
             ]
           }
+        },
+        {
+          "name": "describe",
+          "execute": [
+            "stdin:aux4 db driver prepare execute --query \"SELECT name AS \\\"name\\\", type AS \\\"type\\\", CASE WHEN \\\"notnull\\\"=0 THEN 1 ELSE 0 END AS \\\"nullable\\\", dflt_value AS \\\"default\\\", CASE WHEN pk>0 THEN 'PRI' ELSE '' END AS \\\"key\\\" FROM pragma_table_info(:table) ORDER BY cid\" --params value(*) | node ${packageDir}/lib/aux4-db-sqlite.js values(database) | node -e \"let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const t=d.trim();const o=t?JSON.parse(t).map(r=>{('nullable' in r)?(r.nullable=r.nullable?true:false):0;return Object.keys(r).reduce((a,k)=>{const v=r[k];[null,''].indexOf(v)<0?a[k]=v:0;return a},{});}):'';o?console.log(JSON.stringify(o)):0;});\""
+          ],
+          "help": {
+            "text": "Describe the columns of a table",
+            "variables": [
+              {
+                "name": "database",
+                "text": "Path to the sqlite database file",
+                "default": ":memory:"
+              },
+              {
+                "name": "table",
+                "text": "Table name to describe"
+              }
+            ]
+          }
+        },
+        {
+          "name": "desc",
+          "execute": [
+            "aux4 db sqlite describe params(database, table)"
+          ],
+          "help": {
+            "text": "Describe the columns of a table (alias of describe)",
+            "variables": [
+              {
+                "name": "database",
+                "text": "Path to the sqlite database file",
+                "default": ":memory:"
+              },
+              {
+                "name": "table",
+                "text": "Table name to describe"
+              }
+            ]
+          }
+        },
+        {
+          "name": "list",
+          "execute": [
+            "profile:db:sqlite:list"
+          ],
+          "help": {
+            "text": "List database objects (tables, ...)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "db:sqlite:list",
+      "commands": [
+        {
+          "name": "tables",
+          "execute": [
+            "stdin:aux4 db driver prepare execute --query \"SELECT name AS \\\"name\\\" FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name\" --params value(*) | node ${packageDir}/lib/aux4-db-sqlite.js values(database) | node -e \"let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const t=d.trim();const o=t?JSON.parse(t).map(r=>{('nullable' in r)?(r.nullable=r.nullable?true:false):0;return Object.keys(r).reduce((a,k)=>{const v=r[k];[null,''].indexOf(v)<0?a[k]=v:0;return a},{});}):'';o?console.log(JSON.stringify(o)):0;});\""
+          ],
+          "help": {
+            "text": "List the tables in the database",
+            "variables": [
+              {
+                "name": "database",
+                "text": "Path to the sqlite database file",
+                "default": ":memory:"
+              }
+            ]
+          }
         }
       ]
     }

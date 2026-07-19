@@ -578,3 +578,176 @@ aux4 db sqlite stream --database test.db --query "SELECT invalid_column FROM use
 ```error
 {"item":{},"query":"SELECT invalid_column FROM users LIMIT 1","error":"no such column: invalid_column"}
 ```
+
+# Schema Introspection
+
+```beforeAll
+aux4 db sqlite execute --database introspect.db --query "CREATE TABLE product (id INTEGER PRIMARY KEY, name TEXT NOT NULL, price NUMERIC DEFAULT 0, sku TEXT)"
+```
+
+```beforeAll
+aux4 db sqlite execute --database introspect.db --query "CREATE TABLE tag (id INTEGER PRIMARY KEY)"
+```
+
+```afterAll
+rm -f introspect.db
+```
+
+## Describe a table
+
+### should return canonical column metadata, dropping null and empty fields
+
+```execute
+aux4 db sqlite describe --database introspect.db --table product
+```
+
+```expect:json
+[
+  {
+    "name": "id",
+    "type": "INTEGER",
+    "nullable": true,
+    "key": "PRI"
+  },
+  {
+    "name": "name",
+    "type": "TEXT",
+    "nullable": false
+  },
+  {
+    "name": "price",
+    "type": "NUMERIC",
+    "nullable": true,
+    "default": "0"
+  },
+  {
+    "name": "sku",
+    "type": "TEXT",
+    "nullable": true
+  }
+]
+```
+
+### should keep only present keys per row (null/empty dropped, in definition order)
+
+```execute
+aux4 db sqlite describe --database introspect.db --table product | jq -c 'map(keys_unsorted)'
+```
+
+```expect
+[["name","type","nullable","key"],["name","type","nullable"],["name","type","nullable","default"],["name","type","nullable"]]
+```
+
+### should reduce a plain column to just name, type, nullable
+
+```execute
+aux4 db sqlite describe --database introspect.db --table product | jq -c '.[3]'
+```
+
+```expect
+{"name":"sku","type":"TEXT","nullable":true}
+```
+
+### should never emit a null or empty-string value
+
+```execute
+aux4 db sqlite describe --database introspect.db --table product | jq -c '[.[] | to_entries[] | .value] | map(select(. == null or . == "")) | length'
+```
+
+```expect
+0
+```
+
+### should emit nullable as a real JSON boolean (not 1/0, not "YES"/"NO")
+
+```execute
+aux4 db sqlite describe --database introspect.db --table product | jq -c 'map(.nullable | type)'
+```
+
+```expect
+["boolean","boolean","boolean","boolean"]
+```
+
+### should never emit comment or extra keys (sqlite has neither)
+
+```execute
+aux4 db sqlite describe --database introspect.db --table product | jq -c '[.[] | keys[]] | map(select(. == "comment" or . == "extra")) | length'
+```
+
+```expect
+0
+```
+
+## Describe a table with the desc alias
+
+### should behave the same as describe
+
+```execute
+aux4 db sqlite desc --database introspect.db --table product
+```
+
+```expect:json
+[
+  {
+    "name": "id",
+    "type": "INTEGER",
+    "nullable": true,
+    "key": "PRI"
+  },
+  {
+    "name": "name",
+    "type": "TEXT",
+    "nullable": false
+  },
+  {
+    "name": "price",
+    "type": "NUMERIC",
+    "nullable": true,
+    "default": "0"
+  },
+  {
+    "name": "sku",
+    "type": "TEXT",
+    "nullable": true
+  }
+]
+```
+
+## List tables
+
+### should list the base tables as canonical {name} objects
+
+```execute
+aux4 db sqlite list tables --database introspect.db
+```
+
+```expect:json
+[
+  {
+    "name": "product"
+  },
+  {
+    "name": "tag"
+  }
+]
+```
+
+### should return one canonical {name} object per table
+
+```execute
+aux4 db sqlite list tables --database introspect.db | jq -c '[.[] | keys] | unique'
+```
+
+```expect
+[["name"]]
+```
+
+### should never emit a null or empty-string value
+
+```execute
+aux4 db sqlite list tables --database introspect.db | jq -c '[.[] | to_entries[] | .value] | map(select(. == null or . == "")) | length'
+```
+
+```expect
+0
+```
