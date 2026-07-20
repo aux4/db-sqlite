@@ -133,26 +133,6 @@
           }
         },
         {
-          "name": "desc",
-          "execute": [
-            "aux4 db sqlite describe params(database, table)"
-          ],
-          "help": {
-            "text": "Describe the columns of a table (alias of describe)",
-            "variables": [
-              {
-                "name": "database",
-                "text": "Path to the sqlite database file",
-                "default": ":memory:"
-              },
-              {
-                "name": "table",
-                "text": "Table name to describe"
-              }
-            ]
-          }
-        },
-        {
           "name": "list",
           "execute": [
             "profile:db:sqlite:list"

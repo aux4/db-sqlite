@@ -678,41 +678,6 @@ aux4 db sqlite describe --database introspect.db --table product | jq -c '[.[] |
 0
 ```
 
-## Describe a table with the desc alias
-
-### should behave the same as describe
-
-```execute
-aux4 db sqlite desc --database introspect.db --table product
-```
-
-```expect:json
-[
-  {
-    "name": "id",
-    "type": "INTEGER",
-    "nullable": true,
-    "key": "PRI"
-  },
-  {
-    "name": "name",
-    "type": "TEXT",
-    "nullable": false
-  },
-  {
-    "name": "price",
-    "type": "NUMERIC",
-    "nullable": true,
-    "default": "0"
-  },
-  {
-    "name": "sku",
-    "type": "TEXT",
-    "nullable": true
-  }
-]
-```
-
 ## List tables
 
 ### should list the base tables as canonical {name} objects

@@ -33,7 +33,6 @@ aux4 db sqlite execute \
 - [`aux4 db sqlite execute`](./commands/db/sqlite/execute) - Execute SQL statements on a SQLite database and return all results as a JSON array.
 - [`aux4 db sqlite stream`](./commands/db/sqlite/stream) - Execute SQL statements and stream each row as a newline-delimited JSON object.
 - [`aux4 db sqlite describe`](./commands/db/sqlite/describe) - Describe the columns of a table as a canonical JSON array (see [Schema Introspection](#schema-introspection)).
-- [`aux4 db sqlite desc`](./commands/db/sqlite/desc) - Alias of `describe`.
 - [`aux4 db sqlite list tables`](./commands/db/sqlite/list/tables) - List the tables in the database.
 
 ### Command Reference
@@ -350,14 +349,6 @@ aux4 db sqlite describe --database my.db --table product
 Only keys that carry a value are returned — `null` and empty (`""`) fields are omitted, so a plain column is just `{"name", "type", "nullable"}`. `nullable` is always present as a real JSON boolean.
 
 **SQLite quirk:** a column declared `INTEGER PRIMARY KEY` is an alias for the internal `rowid`, and `pragma_table_info` reports its `notnull` flag as `0` — so `describe` faithfully reports it as `nullable: true` (as shown for `id` above) even though it can never actually hold `NULL`. A regular `NOT NULL` column reports `nullable: false`.
-
-#### aux4 db sqlite desc
-
-Alias of `describe` — accepts the exact same flags and produces the exact same output.
-
-```bash
-aux4 db sqlite desc --database my.db --table product
-```
 
 #### aux4 db sqlite list tables
 
