@@ -6,7 +6,6 @@ on:
       - dev
     paths:
       - '**'
-      - '!.github/**'
       - '!README.md'
       - '!LICENSE'
       - '!.gitignore'
@@ -111,6 +110,7 @@ jobs:
       - name: Publish
         uses: aux4/action@v1
         with:
+          aux4_image: aux4/aux4:dev-publisher
           registry: https://dev.api.hub.aux4.io/v1/packages
           command: publish
           level: ${{ inputs.level || 'patch' }}
