@@ -3,7 +3,7 @@ name: Publish Package
 on:
   push:
     branches:
-      - main
+      - dev
     paths:
       - '**'
       - '!.github/**'
@@ -24,11 +24,14 @@ on:
           - major
 
 concurrency:
-  group: publish-package
+  group: publish-package-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
   contents: write
+
+env:
+  AUX4_REGISTRY_URL: ${{ github.ref_name == 'dev' && 'https://dev.api.hub.aux4.io/v1/packages' || '' }}
 
 jobs:
   lint:
@@ -98,16 +101,17 @@ jobs:
       - name: Mint hub publish token
         id: mint
         env:
-          CLIENT_ID: ${{ secrets.AUX4_PUBLISHER_CLIENT_ID }}
-          CLIENT_SECRET: ${{ secrets.AUX4_PUBLISHER_CLIENT_SECRET }}
+          CLIENT_ID: ${{ secrets.AUX4_DEV_PUBLISHER_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.AUX4_DEV_PUBLISHER_CLIENT_SECRET }}
         run: |
           if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ]; then echo "::error::publisher client id/secret not set"; exit 1; fi
-          TOK=$(curl -sf -u "$CLIENT_ID:$CLIENT_SECRET" -d grant_type=client_credentials https://sso.aux4.io/token | jq -r '.access_token // empty')
+          TOK=$(curl -sf -u "$CLIENT_ID:$CLIENT_SECRET" -d grant_type=client_credentials https://dev.sso.aux4.io/token | jq -r '.access_token // empty')
           if [ -z "$TOK" ]; then echo "::error::client_credentials mint returned no access_token"; exit 1; fi
           echo "::add-mask::$TOK"; echo "token=$TOK" >> "$GITHUB_OUTPUT"
       - name: Publish
         uses: aux4/action@v1
         with:
+          registry: https://dev.api.hub.aux4.io/v1/packages
           command: publish
           level: ${{ inputs.level || 'patch' }}
           aux4_token: ${{ steps.mint.outputs.token }}
